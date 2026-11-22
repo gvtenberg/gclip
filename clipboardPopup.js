@@ -1,9 +1,11 @@
 import St from 'gi://St';
 import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
+import Shell from 'gi://Shell';
 import Gio from 'gi://Gio';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
+import { FILES_MIME } from './clipboardManager.js';
 
 const MAX_PREVIEW_LENGTH = 200;
 const THUMBNAIL_SIZE = 32;
@@ -410,6 +412,20 @@ class ClipboardPopup extends St.Widget {
                 y_align: Clutter.ActorAlign.CENTER
             });
             itemBox.add_child(label);
+        } else if (item.mimetype === FILES_MIME) {
+            // Copied files: icon + file names
+            const names = this._fileNames(item);
+            itemBox.add_child(new St.Icon({
+                icon_name: names.length > 1 ? 'edit-copy-symbolic' : 'text-x-generic-symbolic',
+                style_class: 'gclip-dim',
+                icon_size: 16,
+                y_align: Clutter.ActorAlign.CENTER
+            }));
+            itemBox.add_child(new St.Label({
+                text: names.join(', ').substring(0, MAX_PREVIEW_LENGTH),
+                x_expand: true,
+                y_align: Clutter.ActorAlign.CENTER
+            }));
         }
 
         // Acciones del item; solo se muestran mientras el puntero está sobre la fila
@@ -489,6 +505,17 @@ class ClipboardPopup extends St.Widget {
         return action;
     }
 
+    // File names of a "copied files" item
+    _fileNames(item) {
+        return item.contents.split('\n').slice(1).map(uri => {
+            try {
+                return Gio.File.new_for_uri(uri).get_basename();
+            } catch (e) {
+                return uri;
+            }
+        });
+    }
+
     _createImageThumbnail(imagePath) {
         try {
             let file = Gio.File.new_for_path(imagePath);
@@ -519,6 +546,9 @@ class ClipboardPopup extends St.Widget {
         const filtered = this._getDisplayItems().filter(({ item }) => {
             if (item.mimetype === 'text/plain;charset=utf-8') {
                 return item.contents.toLowerCase().includes(searchText);
+            }
+            if (item.mimetype === FILES_MIME) {
+                return this._fileNames(item).join(' ').toLowerCase().includes(searchText);
             }
             return false;
         });
@@ -655,8 +685,12 @@ class ClipboardPopup extends St.Widget {
     _selectItem(index) {
         if (index >= 0 && index < this._history.length) {
             const item = this._history[index];
-            this._clipboardManager.copyToClipboard(item);
+            const manager = this._clipboardManager;
+            const paste = this._settings.get_boolean('paste-on-select');
+            const copied = manager.copyToClipboard(item);
             this.close();
+            if (paste)
+                copied.then(() => manager.pasteSoon()).catch(() => {});
         }
     }
 
@@ -695,12 +729,27 @@ class ClipboardPopup extends St.Widget {
             duration: 150,
             mode: Clutter.AnimationMode.EASE_OUT_QUAD
         });
+        // Grab pointer and keyboard while open, so a click outside or Esc closes the popup
+        this._grab = Main.pushModal(this, { actionMode: Shell.ActionMode.POPUP });
+        if ((this._grab.get_seat_state() & Clutter.GrabState.KEYBOARD) === 0) {
+            Main.popModal(this._grab);
+            this._grab = null;
+        }
+        this.connect('destroy', () => this._releaseGrab());
         global.stage.set_key_focus(this._searchEntry);
+    }
+
+    _releaseGrab() {
+        if (this._grab) {
+            Main.popModal(this._grab);
+            this._grab = null;
+        }
     }
     
     close() {
         if (this._closing) return;
         this._closing = true;
+        this._releaseGrab();
         
         if (this._capturedEventId) {
             global.stage.disconnect(this._capturedEventId);

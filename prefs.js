@@ -55,6 +55,23 @@ export default class GClipPreferences extends ExtensionPreferences {
             Gio.SettingsBindFlags.DEFAULT);
         generalGroup.add(privateRow);
 
+        // Options for copied files, paste on select, clear at login and closing
+        const pasteRow = new Adw.SwitchRow({
+            title: 'Paste on Select',
+            subtitle: 'Paste the chosen item right away (Ctrl+V; Ctrl+Shift+V in terminals)'
+        });
+        settings.bind('paste-on-select', pasteRow, 'active',
+            Gio.SettingsBindFlags.DEFAULT);
+        generalGroup.add(pasteRow);
+
+        const clearLoginRow = new Adw.SwitchRow({
+            title: 'Clear History at Login',
+            subtitle: 'Start each session with an empty history (bookmarks are kept)'
+        });
+        settings.bind('clear-on-login', clearLoginRow, 'active',
+            Gio.SettingsBindFlags.DEFAULT);
+        generalGroup.add(clearLoginRow);
+
         // Appearance
         const appearanceGroup = new Adw.PreferencesGroup({
             title: 'Appearance'

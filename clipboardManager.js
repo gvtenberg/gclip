@@ -10,6 +10,9 @@ const CACHE_DIR = GLib.build_filenamev([
     'gclip@usuario.dev'
 ]);
 const HISTORY_FILE = GLib.build_filenamev([CACHE_DIR, 'clipboard-history.json']);
+// Files copied in Files (Nautilus): "copy\nfile:///...\nfile:///..."
+export const FILES_MIME = 'x-special/gnome-copied-files';
+const EXTENSION_DIR = GLib.path_get_dirname(GLib.filename_from_uri(import.meta.url)[0]);
 
 export class ClipboardManager {
     constructor(settings) {
@@ -21,7 +24,7 @@ export class ClipboardManager {
         this._lastImageHash = '';
         
         this._ensureDirectories();
-        this._loadHistory();
+        this._loadHistory().then(() => this._clearIfNewSession());
         this._startMonitoring();
     }
 
@@ -55,6 +58,35 @@ export class ClipboardManager {
     }
 
     _checkClipboard() {
+        // Copied files: keep the list of files (not the text with the path)
+        let types = [];
+        try {
+            types = this._clipboard.get_mimetypes(St.ClipboardType.CLIPBOARD) || [];
+        } catch (e) {
+            types = [];
+        }
+        const fileType = types.includes(FILES_MIME) ? FILES_MIME
+            : (types.includes('text/uri-list') ? 'text/uri-list' : null);
+        if (fileType) {
+            this._clipboard.get_content(St.ClipboardType.CLIPBOARD, fileType, (clipboard, bytes) => {
+                if (!bytes || bytes.get_size() === 0)
+                    return;
+                let lines = new TextDecoder().decode(bytes.get_data())
+                    .split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+                if (fileType === FILES_MIME)
+                    lines = lines.slice(1); // drop "copy"/"cut"
+                if (lines.length === 0)
+                    return;
+                // always "copy": pasting a cut item again must not move the file again
+                const contents = ['copy', ...lines].join('\n');
+                if (contents !== this._lastText) {
+                    this._lastText = contents;
+                    this._addToHistory({ favorite: false, mimetype: FILES_MIME, contents });
+                }
+            });
+            return;
+        }
+
         // Intentar obtener contenido del clipboard con múltiples mimetypes
         const mimetypes = [
             "text/plain;charset=utf-8",
@@ -222,6 +254,13 @@ export class ClipboardManager {
     async copyToClipboard(item) {
         if (item.mimetype === 'text/plain;charset=utf-8') {
             this._clipboard.set_text(St.ClipboardType.CLIPBOARD, item.contents);
+        } else if (item.mimetype === FILES_MIME) {
+            this._lastText = item.contents;
+            // The helper offers several formats (Files, Firefox, editors); if it fails, only the Files format
+            if (!(await this._copyFilesWithHelper(item.contents))) {
+                this._clipboard.set_content(St.ClipboardType.CLIPBOARD, FILES_MIME,
+                    new GLib.Bytes(new TextEncoder().encode(item.contents)));
+            }
         } else if (item.mimetype && item.mimetype.startsWith('image/')) {
             let file = Gio.File.new_for_path(item.contents);
             try {
@@ -269,7 +308,86 @@ export class ClipboardManager {
         }
     }
 
+    // Clear the history (except bookmarks) when a new session starts
+    _clearIfNewSession() {
+        // INVOCATION_ID changes at every login (gnome-shell is a systemd service)
+        const sessionId = GLib.getenv('INVOCATION_ID') || GLib.getenv('XDG_SESSION_ID') || '';
+        if (!sessionId || sessionId === this._settings.get_string('last-session-id'))
+            return;
+        this._settings.set_string('last-session-id', sessionId);
+        if (!this._settings.get_boolean('clear-on-login'))
+            return;
+        this._history.forEach(item => {
+            if (!item.favorite && item.mimetype && item.mimetype.startsWith('image/'))
+                this._deleteImageFile(item.contents);
+        });
+        this._history = this._history.filter(item => item.favorite);
+        this._saveHistory();
+    }
+
+    // Run files-clipboard.py and wait until it owns the clipboard
+    _copyFilesWithHelper(contents) {
+        return new Promise(resolve => {
+            try {
+                // the previous helper exits by itself when this one takes the clipboard
+                const helper = GLib.build_filenamev([EXTENSION_DIR, 'files-clipboard.py']);
+                const uris = contents.split('\n').slice(1);
+                Gio.Subprocess.new(['python3', helper, ...uris],
+                    Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_SILENCE);
+            } catch (e) {
+                console.debug(`GClip: files helper failed: ${e}`);
+                resolve(false);
+                return;
+            }
+            const selection = global.display.get_selection();
+            let timeoutId = 0;
+            const done = ok => {
+                selection.disconnect(signalId);
+                if (timeoutId)
+                    GLib.source_remove(timeoutId);
+                resolve(ok);
+            };
+            const signalId = selection.connect('owner-changed', (sel, type) => {
+                if (type === Meta.SelectionType.SELECTION_CLIPBOARD)
+                    done(true);
+            });
+            timeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 2000, () => {
+                timeoutId = 0;
+                done(false);
+                return GLib.SOURCE_REMOVE;
+            });
+        });
+    }
+
+    // Paste into the focused window: Ctrl+V (Ctrl+Shift+V in terminals)
+    pasteSoon() {
+        if (this._pasteTimeoutId)
+            GLib.source_remove(this._pasteTimeoutId);
+        this._pasteTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 150, () => {
+            this._pasteTimeoutId = 0;
+            const win = global.display.focus_window;
+            const wmClass = (win && win.get_wm_class()) || '';
+            const terminal = /terminal|console|kgx|ptyxis|tilix|alacritty|kitty|wezterm|konsole/i.test(wmClass);
+            if (!this._virtualKeyboard) {
+                this._virtualKeyboard = Clutter.get_default_backend().get_default_seat()
+                    .create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
+            }
+            const vk = this._virtualKeyboard;
+            const t = GLib.get_monotonic_time();
+            const keys = terminal ? [Clutter.KEY_Control_L, Clutter.KEY_Shift_L, Clutter.KEY_v]
+                : [Clutter.KEY_Control_L, Clutter.KEY_v];
+            keys.forEach(k => vk.notify_keyval(t, k, Clutter.KeyState.PRESSED));
+            [...keys].reverse().forEach(k => vk.notify_keyval(t, k, Clutter.KeyState.RELEASED));
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
     destroy() {
+        if (this._pasteTimeoutId) {
+            GLib.source_remove(this._pasteTimeoutId);
+            this._pasteTimeoutId = 0;
+        }
+        this._virtualKeyboard = null;
         if (this._selectionOwnerChangedId) {
             const metaDisplay = Shell.Global.get().get_display();
             const selection = metaDisplay.get_selection();

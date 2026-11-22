@@ -17,6 +17,8 @@ A lightweight clipboard manager extension for GNOME Shell with a Windows-style p
 - 🖱️ **Item Actions**: Bookmark and delete buttons appear when hovering an item
 - 📌 **Bookmarks**: Pin items permanently outside the history limit
 - 🔒 **Private mode**: Pause history recording while you copy sensitive data
+- 📁 **Copied Files**: Files copied in Files (Nautilus) are kept as files, shown with an icon and their names, and paste as files again in Files, Firefox and text editors
+- 📥 **Paste on Select**: Optionally paste the chosen item right away into the focused window
 
 ## Installation
 
@@ -66,6 +68,8 @@ Press `Super+Shift+V` to open the popup at the pointer position. Start typing to
 
 Search matches text items only; images are hidden while a search is active.
 
+With **Paste on Select** on, choosing an item also pastes it into the focused window (`Ctrl+V`, or `Ctrl+Shift+V` in terminals). Pasting a cut file pastes a copy, so the original is never moved twice.
+
 ### Bookmarks
 
 The **Bookmarks** tab lets you pin items permanently so they're always accessible, regardless of the history limit.
@@ -97,6 +101,7 @@ gclip@Geomoon.dev/
 ├── clipboardManager.js   # Core clipboard monitoring and history management
 ├── clipboardPopup.js     # UI popup window with tabs, search and navigation
 ├── prefs.js             # Settings/preferences UI
+├── files-clipboard.py   # Helper that offers copied files in several formats at once
 ├── metadata.json        # Extension metadata and version info
 ├── stylesheet.css       # Popup layout and the Light/Dark/Darker palettes
 ├── schemas/             # GSettings configuration schemas
@@ -129,6 +134,8 @@ Settings:
 - **Show Clipboard Popup**: Shortcut that opens the popup (default: `Super+Shift+V`). Click "Change" and press your desired combination.
 - **Toggle Private Mode**: Optional global shortcut (unset by default). In the shortcut dialog, `Backspace` clears the shortcut.
 - **Clear History**: Delete all saved clipboard data and images.
+- **Paste on Select**: Paste the chosen item into the focused window (default: off).
+- **Clear History at Login**: Start each session with an empty history; bookmarks are kept and locking the screen does not clear it (default: off).
 
 Theme changes apply the next time the popup is opened. The gear button in the popup's footer opens these preferences.
 
