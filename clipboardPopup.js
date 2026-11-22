@@ -674,7 +674,7 @@ class ClipboardPopup extends St.Widget {
             return Clutter.EVENT_STOP;
         }
 
-        if (symbol === Clutter.KEY_Escape) {
+        if (symbol === Clutter.KEY_Escape && this._settings.get_boolean('close-on-escape')) {
             this.close();
             return Clutter.EVENT_STOP;
         }
@@ -729,11 +729,18 @@ class ClipboardPopup extends St.Widget {
             duration: 150,
             mode: Clutter.AnimationMode.EASE_OUT_QUAD
         });
-        // Grab pointer and keyboard while open, so a click outside or Esc closes the popup
-        this._grab = Main.pushModal(this, { actionMode: Shell.ActionMode.POPUP });
-        if ((this._grab.get_seat_state() & Clutter.GrabState.KEYBOARD) === 0) {
-            Main.popModal(this._grab);
-            this._grab = null;
+        // With "Close on Outside Click", grab pointer and keyboard while open.
+        // During the grab, events go to the popup (not to the stage): listen on the popup itself.
+        if (this._settings.get_boolean('close-on-outside-click')) {
+            this._grab = Main.pushModal(this, { actionMode: Shell.ActionMode.POPUP });
+            if ((this._grab.get_seat_state() & Clutter.GrabState.KEYBOARD) === 0) {
+                Main.popModal(this._grab);
+                this._grab = null;
+            } else {
+                global.stage.disconnect(this._capturedEventId);
+                this._capturedEventId = this.connect('captured-event', this._onCapturedEvent.bind(this));
+                this._capturedEventOwner = this;
+            }
         }
         this.connect('destroy', () => this._releaseGrab());
         global.stage.set_key_focus(this._searchEntry);
@@ -752,7 +759,7 @@ class ClipboardPopup extends St.Widget {
         this._releaseGrab();
         
         if (this._capturedEventId) {
-            global.stage.disconnect(this._capturedEventId);
+            (this._capturedEventOwner || global.stage).disconnect(this._capturedEventId);
             this._capturedEventId = null;
         }
         

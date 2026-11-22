@@ -72,6 +72,20 @@ export default class GClipPreferences extends ExtensionPreferences {
             Gio.SettingsBindFlags.DEFAULT);
         generalGroup.add(clearLoginRow);
 
+        const escRow = new Adw.SwitchRow({
+            title: 'Close with Esc',
+            subtitle: 'Pressing Esc closes the popup'
+        });
+        settings.bind('close-on-escape', escRow, 'active', Gio.SettingsBindFlags.DEFAULT);
+        generalGroup.add(escRow);
+
+        const outsideRow = new Adw.SwitchRow({
+            title: 'Close on Outside Click',
+            subtitle: 'A click outside the popup closes it (that click does not reach the window behind)'
+        });
+        settings.bind('close-on-outside-click', outsideRow, 'active', Gio.SettingsBindFlags.DEFAULT);
+        generalGroup.add(outsideRow);
+
         // Appearance
         const appearanceGroup = new Adw.PreferencesGroup({
             title: 'Appearance'

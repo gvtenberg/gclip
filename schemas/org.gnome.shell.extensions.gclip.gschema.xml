@@ -61,6 +61,18 @@
       <description>Remove history items (except bookmarks) when a new user session starts</description>
     </key>
 
+    <key name="close-on-escape" type="b">
+      <default>true</default>
+      <summary>Close with Esc</summary>
+      <description>Pressing Esc closes the popup</description>
+    </key>
+
+    <key name="close-on-outside-click" type="b">
+      <default>true</default>
+      <summary>Close on outside click</summary>
+      <description>Grab pointer and keyboard while the popup is open, so a click outside it closes it (the click is not passed on)</description>
+    </key>
+
     <key name="last-session-id" type="s">
       <default>''</default>
       <summary>Internal: last session seen</summary>

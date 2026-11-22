@@ -136,6 +136,8 @@ Settings:
 - **Clear History**: Delete all saved clipboard data and images.
 - **Paste on Select**: Paste the chosen item into the focused window (default: off).
 - **Clear History at Login**: Start each session with an empty history; bookmarks are kept and locking the screen does not clear it (default: off).
+- **Close with Esc**: `Esc` closes the popup (default: on).
+- **Close on Outside Click**: A click outside the popup closes it, and that click does not reach the window behind (default: on).
 
 Theme changes apply the next time the popup is opened. The gear button in the popup's footer opens these preferences.
 
