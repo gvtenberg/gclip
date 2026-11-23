@@ -223,3 +223,16 @@ MIT License
 ## Author
 
 Created for efficient clipboard management on GNOME/Wayland
+
+## Tested on
+
+The changes in this fork (copied files, paste on select, clear at login, close on outside click) were tested in November 2026 on:
+
+- Zorin OS 18.1 (based on Ubuntu 24.04 "noble"), Linux 7.0.0
+- GNOME Shell 46.0 (mutter 46.2), Wayland session, Acer Aspire laptop
+- GClip version 4 from extensions.gnome.org as the base
+- Files (Nautilus) 46.4: copy files, then paste them from the history
+- Firefox 160: copied files become attachments; several clipboard formats
+- Python 3.12, GTK 4.14 (`files-clipboard.py`)
+
+Not tested on X11 or on GNOME 45, 47 or newer.
